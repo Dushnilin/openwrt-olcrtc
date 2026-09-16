@@ -4,8 +4,15 @@ OpenWrt feed для запуска [olcRTC](https://github.com/openlibrecommunit
 клиента на роутере и раздачи через него интернета Wi-Fi-клиентам по
 схеме `LAN → tun → SOCKS5 (olcrtc) → WebRTC carrier`.
 
-Поддерживаемые таргеты (рекомендуется): **aarch64_cortex-a53** (MT7981B / Filogic 820),
-**x86_64**, **aarch64_generic**.
+Поддерживаемые архитектуры роутеров:
+- **mediatek/filogic** (ARM64 `aarch64_cortex-a53` — MT7981B, MT7986, MT7988: Xiaomi AX3000T, Redmi AX6000, GL.iNet Flint 2 и др.)
+- **x86/64** (`x86_64` — ПК, мини-ПК, виртуальные машины Proxmox/ESXi, x86-роутеры)
+- **ramips/mt7621** (MIPS `mipsel_24kc` — Keenetic, Xiaomi Mi Router 3G/4, DIR-882, ASUS и др.)
+- **qualcommax/ipq807x** (ARM64 `aarch64_cortex-a53` — Xiaomi AX3600/AX9000, Dynalink)
+- **rockchip/armv8** (ARM64 `aarch64_generic` — NanoPi R2S, R4S, R5S и др.)
+- **bcm27xx/bcm2711** (ARM64 `aarch64_cortex-a72` — Raspberry Pi 4 / CM4)
+- **ipq40xx/generic** (ARM32 `arm_cortex-a7_neon-vfpv4` — ASUS RT-AC58U, GL.iNet B1300 и др.)
+- **ath79/generic** (MIPS `mips_24kc` — TP-Link Archer C7 и др.)
 
 Версия OpenWrt: **25.12** (рекомендуется, текущий стабильный, пакет-менеджер `apk`)
 или **24.10** (старый стабильный, `opkg`) или **SNAPSHOT**.
@@ -24,7 +31,7 @@ OpenWrt feed для запуска [olcRTC](https://github.com/openlibrecommunit
 Подключитесь к роутеру по SSH и выполните:
 
 ```sh
-sh -c "$(wget -qO- https://raw.githubusercontent.com/alekvol/openwrt-olcrtc/master/install.sh)"
+sh -c "$(wget -qO- https://raw.githubusercontent.com/Dushnilin/openwrt-olcrtc/master/install.sh)"
 ```
 
 Скрипт автоматически определит архитектуру и пакетный менеджер, скачает пакеты
@@ -84,7 +91,7 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/alekvol/openwrt-olcrtc/mast
 ### Удаление
 
 ```sh
-sh -c "$(wget -qO- https://raw.githubusercontent.com/alekvol/openwrt-olcrtc/master/uninstall.sh)"
+sh -c "$(wget -qO- https://raw.githubusercontent.com/Dushnilin/openwrt-olcrtc/master/uninstall.sh)"
 ```
 
 
@@ -95,7 +102,7 @@ sh -c "$(wget -qO- https://raw.githubusercontent.com/alekvol/openwrt-olcrtc/mast
 В `feeds.conf.default` или `feeds.conf` корня OpenWrt buildroot:
 
 ```
-src-git olcrtc https://github.com/alekvol/openwrt-olcrtc.git
+src-git olcrtc https://github.com/Dushnilin/openwrt-olcrtc.git
 ```
 
 Затем:

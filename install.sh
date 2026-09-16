@@ -2,12 +2,12 @@
 # ══════════════════════════════════════════════════════════════
 #  OlcRTC OpenWrt — установка одной командой
 #  Использование:
-#    sh -c "$(wget -qO- https://raw.githubusercontent.com/alekvol/openwrt-olcrtc/master/install.sh)"
+#    sh -c "$(wget -qO- https://raw.githubusercontent.com/Dushnilin/openwrt-olcrtc/master/install.sh)"
 # ══════════════════════════════════════════════════════════════
 set -e
 
-GITHUB_REPO="alekvol/openwrt-olcrtc"
-PKG_VERSION="0.1.2-1"
+GITHUB_REPO="Dushnilin/openwrt-olcrtc"
+PKG_VERSION="0.1.3-1"
 TMP_DIR="/tmp/olcrtc-install"
 
 GREEN='\033[0;32m'
@@ -30,24 +30,40 @@ command -v wget  >/dev/null 2>&1 || error "wget не найден"
 command -v uci   >/dev/null 2>&1 || error "uci не найден. Это не OpenWrt?"
 
 # ── Определяем архитектуру ────────────────────────────────────
-ARCH=$(uname -m)
-case "$ARCH" in
-	aarch64)
-		PKG_ARCH="aarch64_cortex-a53"
-		info "Архитектура: $ARCH ($PKG_ARCH)"
-		;;
-	x86_64)
-		PKG_ARCH="x86_64"
-		info "Архитектура: $ARCH ($PKG_ARCH)"
-		;;
-	armv7l|armv7)
-		PKG_ARCH="arm_cortex-a7_neon-vfpv4"
-		warn "Архитектура ARM32: $ARCH — поддержка ограничена"
-		;;
-	*)
-		error "Неподдерживаемая архитектура: $ARCH (поддерживаются aarch64, x86_64)"
-		;;
-esac
+PKG_ARCH=""
+if command -v opkg >/dev/null 2>&1; then
+	# Получаем точную архитектуру пакетов из opkg (исключая all/noarch)
+	DETECTED_OPKG_ARCH=$(opkg print-architecture 2>/dev/null | awk '$2 !~ /^(all|noarch)$/ {print $2}' | tail -n1)
+	if [ -n "$DETECTED_OPKG_ARCH" ]; then
+		PKG_ARCH="$DETECTED_OPKG_ARCH"
+	fi
+fi
+
+if [ -z "$PKG_ARCH" ]; then
+	ARCH=$(uname -m)
+	case "$ARCH" in
+		aarch64)
+			PKG_ARCH="aarch64_cortex-a53"
+			;;
+		x86_64)
+			PKG_ARCH="x86_64"
+			;;
+		mips)
+			PKG_ARCH="mips_24kc"
+			;;
+		mipsel)
+			PKG_ARCH="mipsel_24kc"
+			;;
+		armv7l|armv7)
+			PKG_ARCH="arm_cortex-a7_neon-vfpv4"
+			;;
+		*)
+			error "Неподдерживаемая архитектура: $ARCH"
+			;;
+	esac
+fi
+
+info "Архитектура пакетов: $PKG_ARCH"
 
 # ── Определяем пакетный менеджер ──────────────────────────────
 if [ -f /etc/openwrt_release ]; then

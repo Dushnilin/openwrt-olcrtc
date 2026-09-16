@@ -2,7 +2,7 @@
 # ══════════════════════════════════════════════════════════════
 #  OlcRTC OpenWrt — удаление
 #  Использование:
-#    sh -c "$(wget -qO- https://raw.githubusercontent.com/alekvol/openwrt-olcrtc/master/uninstall.sh)"
+#    sh -c "$(wget -qO- https://raw.githubusercontent.com/Dushnilin/openwrt-olcrtc/master/uninstall.sh)"
 # ══════════════════════════════════════════════════════════════
 set -e
 

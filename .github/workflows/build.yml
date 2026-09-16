@@ -8,31 +8,43 @@ on:
   workflow_dispatch:
     inputs:
       openwrt_version:
-        description: 'OpenWrt version (e.g. 25.12.3, 24.10.6, SNAPSHOT)'
+        description: 'OpenWrt version (e.g. 25.12.3, 24.10.6, all)'
         required: true
-        default: '25.12.3'
+        default: 'all'
       target:
-        description: 'Target (e.g. mediatek/filogic, x86/64)'
+        description: 'Target (e.g. mediatek/filogic, x86/64, ramips/mt7621, all)'
         required: true
-        default: 'mediatek/filogic'
+        default: 'all'
 
 permissions:
   contents: write
 
 jobs:
   build:
+    name: build (${{ matrix.openwrt_version }}, ${{ matrix.target }})
     runs-on: ubuntu-22.04
+    if: >-
+      (github.event.inputs.target == null || github.event.inputs.target == 'all' || github.event.inputs.target == matrix.target) &&
+      (github.event.inputs.openwrt_version == null || github.event.inputs.openwrt_version == 'all' || github.event.inputs.openwrt_version == matrix.openwrt_version)
     strategy:
       fail-fast: false
       matrix:
         openwrt_version: ['25.12.3', '24.10.6']
-        target: ['mediatek/filogic', 'x86/64']
+        target:
+          - 'mediatek/filogic'
+          - 'x86/64'
+          - 'ramips/mt7621'
+          - 'qualcommax/ipq807x'
+          - 'rockchip/armv8'
+          - 'bcm27xx/bcm2711'
+          - 'ipq40xx/generic'
+          - 'ath79/generic'
     env:
-      OPENWRT_VERSION: ${{ github.event.inputs.openwrt_version || matrix.openwrt_version }}
-      TARGET:          ${{ github.event.inputs.target           || matrix.target }}
+      OPENWRT_VERSION: ${{ matrix.openwrt_version }}
+      TARGET:          ${{ matrix.target }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Install deps
         run: |
@@ -102,7 +114,7 @@ jobs:
       - name: Build
         working-directory: sdk
         run: |
-          make package/olcrtc/compile         V=s -j$(nproc) || make package/olcrtc/compile         V=s
+          make package/olcrtc/compile           V=s -j$(nproc) || make package/olcrtc/compile           V=s
           make package/olcrtc-tun2socks/compile V=s -j$(nproc) || make package/olcrtc-tun2socks/compile V=s
           make package/luci-app-olcrtc/compile  V=s -j$(nproc) || make package/luci-app-olcrtc/compile  V=s
           make package/luci-i18n-olcrtc-ru/compile V=s -j$(nproc) || true
@@ -110,11 +122,34 @@ jobs:
       - name: Collect packages
         run: |
           mkdir -p artifacts
+          safe_target="${TARGET//\//-}"
+
+          # Копируем .ipk (содержат архитектуру в названии)
           find sdk/bin \( \
-              -name 'olcrtc*.ipk'         -o -name 'olcrtc*.apk' -o \
-              -name 'luci-app-olcrtc*.ipk' -o -name 'luci-app-olcrtc*.apk' -o \
-              -name 'luci-i18n-olcrtc-*.ipk' -o -name 'luci-i18n-olcrtc-*.apk' \
-            \) -exec cp {} artifacts/ \;
+              -name 'olcrtc*.ipk' -o \
+              -name 'luci-app-olcrtc*.ipk' -o \
+              -name 'luci-i18n-olcrtc-*.ipk' \
+          \) -exec cp {} artifacts/ \;
+
+          # Обработка .apk:
+          # Для бинарного olcrtc добавляем архитектуру, чтобы не было коллизий
+          find sdk/bin \( \
+              -name 'olcrtc*.apk' -o \
+              -name 'luci-app-olcrtc*.apk' -o \
+              -name 'luci-i18n-olcrtc-*.apk' \
+          \) | while read -r apk_path; do
+            apk_name=$(basename "$apk_path")
+            if echo "$apk_name" | grep -qE '^olcrtc-[0-9]'; then
+              arch_dir=$(echo "$apk_path" | awk -F'/packages/' '{print $2}' | cut -d'/' -f1)
+              if [ -n "$arch_dir" ]; then
+                cp "$apk_path" "artifacts/olcrtc_0.1.3-1_${arch_dir}.apk"
+              fi
+              cp "$apk_path" "artifacts/olcrtc_0.1.3-1_${safe_target}.apk"
+            else
+              cp "$apk_path" artifacts/
+            fi
+          done
+
           ls -la artifacts/
           count=$(ls -1 artifacts/ 2>/dev/null | wc -l)
           echo "Collected $count package(s)"
@@ -133,17 +168,42 @@ jobs:
           echo "name=olcrtc-${OPENWRT_VERSION}-${safe_target}" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.artname.outputs.name }}
           path: |
             artifacts/*.ipk
             artifacts/*.apk
 
-      - name: Publish release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    name: Publish Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Prepare release files and checksums
+        working-directory: dist
+        run: |
+          ls -la
+          sha256sum *.ipk *.apk 2>/dev/null > SHA256SUMS || sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/*.ipk
-            artifacts/*.apk
+            dist/*.ipk
+            dist/*.apk
+            dist/SHA256SUMS
+          generate_release_notes: true
