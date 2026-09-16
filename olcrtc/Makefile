@@ -7,8 +7,12 @@ PKG_USE_MIPS16:=0
 
 include $(TOPDIR)/rules.mk
 
-TARGET_CFLAGS:=$(filter-out -mips16 -minterlink-mips16,$(TARGET_CFLAGS)) -mno-mips16
-TARGET_CXXFLAGS:=$(filter-out -mips16 -minterlink-mips16,$(TARGET_CXXFLAGS)) -mno-mips16
+TARGET_CFLAGS:=$(filter-out -mips16 -minterlink-mips16,$(TARGET_CFLAGS))
+TARGET_CXXFLAGS:=$(filter-out -mips16 -minterlink-mips16,$(TARGET_CXXFLAGS))
+ifneq ($(filter mips%,$(ARCH)),)
+  TARGET_CFLAGS += -mno-mips16
+  TARGET_CXXFLAGS += -mno-mips16
+endif
 
 PKG_NAME:=olcrtc
 PKG_VERSION:=0.1.3
