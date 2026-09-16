@@ -8,13 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       openwrt_version:
-        description: 'OpenWrt version (e.g. 25.12.3, 24.10.6, all)'
-        required: true
-        default: 'all'
+        description: 'OpenWrt version (e.g. 25.12.3, 24.10.6)'
+        required: false
       target:
-        description: 'Target (e.g. mediatek/filogic, x86/64, ramips/mt7621, all)'
-        required: true
-        default: 'all'
+        description: 'Target (e.g. mediatek/filogic, x86/64)'
+        required: false
 
 permissions:
   contents: write
@@ -23,9 +21,6 @@ jobs:
   build:
     name: build (${{ matrix.openwrt_version }}, ${{ matrix.target }})
     runs-on: ubuntu-22.04
-    if: >-
-      (github.event.inputs.target == null || github.event.inputs.target == 'all' || github.event.inputs.target == matrix.target) &&
-      (github.event.inputs.openwrt_version == null || github.event.inputs.openwrt_version == 'all' || github.event.inputs.openwrt_version == matrix.openwrt_version)
     strategy:
       fail-fast: false
       matrix:
