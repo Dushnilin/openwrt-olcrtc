@@ -3,7 +3,12 @@
 # Licensed under MIT
 #
 
+PKG_USE_MIPS16:=0
+
 include $(TOPDIR)/rules.mk
+
+TARGET_CFLAGS:=$(filter-out -mips16 -minterlink-mips16,$(TARGET_CFLAGS)) -mno-mips16
+TARGET_CXXFLAGS:=$(filter-out -mips16 -minterlink-mips16,$(TARGET_CXXFLAGS)) -mno-mips16
 
 PKG_NAME:=olcrtc
 PKG_VERSION:=0.1.3
@@ -21,7 +26,6 @@ PKG_MAINTAINER:=alekvol
 
 PKG_BUILD_DEPENDS:=golang/host
 PKG_BUILD_PARALLEL:=1
-PKG_USE_MIPS16:=0
 
 GO_PKG:=github.com/openlibrecommunity/olcrtc
 GO_PKG_BUILD_PKG:=github.com/openlibrecommunity/olcrtc/cmd/olcrtc
