@@ -13,13 +13,41 @@ on:
       target:
         description: 'Target (e.g. mediatek/filogic, x86/64)'
         required: false
+      publish_release:
+        description: 'Publish release (default: true)'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
 jobs:
+  meta:
+    name: Determine version and tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - id: v
+        name: Read package version
+        run: |
+          if [ -n "${{ github.ref_name }}" ] && echo "${{ github.ref }}" | grep -q 'refs/tags/'; then
+            TAG="${{ github.ref_name }}"
+            VER="${TAG#v}"
+          else
+            VER=$(grep -E '^PKG_VERSION:=' olcrtc/Makefile | cut -d= -f2 | tr -d ' ')
+            TAG="v$VER"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "olcRTC version: $VER, tag: $TAG"
+
   build:
     name: build (${{ matrix.openwrt_version }}, ${{ matrix.target }})
+    needs: meta
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -118,6 +146,9 @@ jobs:
         run: |
           mkdir -p artifacts
           safe_target="${TARGET//\//-}"
+          VER="${{ needs.meta.outputs.version }}"
+          REL=$(grep -E '^PKG_RELEASE:=' olcrtc/Makefile | cut -d= -f2 | tr -d ' ' || echo "1")
+          FULL_VER="${VER}-${REL}"
 
           # Копируем .ipk (содержат архитектуру в названии)
           find sdk/bin \( \
@@ -137,9 +168,9 @@ jobs:
             if echo "$apk_name" | grep -qE '^olcrtc-[0-9]'; then
               arch_dir=$(echo "$apk_path" | awk -F'/packages/' '{print $2}' | cut -d'/' -f1)
               if [ -n "$arch_dir" ]; then
-                cp "$apk_path" "artifacts/olcrtc_0.1.3-1_${arch_dir}.apk"
+                cp "$apk_path" "artifacts/olcrtc_${FULL_VER}_${arch_dir}.apk"
               fi
-              cp "$apk_path" "artifacts/olcrtc_0.1.3-1_${safe_target}.apk"
+              cp "$apk_path" "artifacts/olcrtc_${FULL_VER}_${safe_target}.apk"
             else
               cp "$apk_path" artifacts/
             fi
@@ -172,8 +203,8 @@ jobs:
 
   release:
     name: Publish Release
-    needs: build
-    if: always() && startsWith(github.ref, 'refs/tags/') && !cancelled()
+    needs: [meta, build]
+    if: always() && !cancelled() && !contains(needs.*.result, 'failure') && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -197,6 +228,8 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: ${{ needs.meta.outputs.tag }}
           files: |
             dist/*.ipk
             dist/*.apk

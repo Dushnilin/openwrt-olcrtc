@@ -1,0 +1,119 @@
+name: Watch Upstream
+
+on:
+  schedule:
+    - cron: '27 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even if no upstream changes detected'
+        type: boolean
+        default: false
+      version:
+        description: 'Custom version override (e.g. 0.1.4)'
+        required: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync:
+    name: Sync with upstream and trigger build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check upstream for updates
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          git remote add upstream https://github.com/alekvol/openwrt-olcrtc.git 2>/dev/null || git remote set-url upstream https://github.com/alekvol/openwrt-olcrtc.git
+          git fetch upstream master --tags
+
+          UPSTREAM_COMMITS=$(git rev-list HEAD..upstream/master --count)
+          echo "Upstream commits ahead: $UPSTREAM_COMMITS"
+
+          # Get latest upstream release tag if any
+          UPSTREAM_TAG=$(gh api repos/alekvol/openwrt-olcrtc/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
+          echo "Latest upstream release tag: $UPSTREAM_TAG"
+
+          # Current local version
+          CUR_VER=$(grep -E '^PKG_VERSION:=' olcrtc/Makefile | cut -d= -f2 | tr -d ' ')
+          echo "Current local version: $CUR_VER"
+
+          CHANGED="false"
+          TARGET_VER="$CUR_VER"
+
+          # Check if custom version passed
+          if [ -n "${{ inputs.version }}" ]; then
+            TARGET_VER="${{ inputs.version }}"
+            TARGET_VER="${TARGET_VER#v}"
+            CHANGED="true"
+          elif [ -n "$UPSTREAM_TAG" ]; then
+            CLEAN_UPSTREAM_TAG="${UPSTREAM_TAG#v}"
+            if [ "$CLEAN_UPSTREAM_TAG" != "$CUR_VER" ]; then
+              TARGET_VER="$CLEAN_UPSTREAM_TAG"
+              CHANGED="true"
+            fi
+          fi
+
+          if [ "$UPSTREAM_COMMITS" -gt 0 ]; then
+            echo "Merging upstream master into master..."
+            git merge upstream/master -m "sync: merge upstream alekvol/openwrt-olcrtc changes" || git merge --abort
+            CHANGED="true"
+          fi
+
+          if [ "${{ inputs.force_release }}" = "true" ]; then
+            CHANGED="true"
+          fi
+
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "target_ver=$TARGET_VER" >> "$GITHUB_OUTPUT"
+          echo "tag=v$TARGET_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Bump package version if changed
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          VER="${{ steps.check.outputs.target_ver }}"
+          TAG="${{ steps.check.outputs.tag }}"
+
+          sed -i -E "s/^PKG_VERSION:=.*/PKG_VERSION:=$VER/" olcrtc/Makefile olcrtc-tun2socks/Makefile luci-app-olcrtc/Makefile
+          sed -i -E "s/PKG_VERSION=\"[^\"]+\"/PKG_VERSION=\"$VER-1\"/" install.sh
+
+          git add olcrtc/Makefile olcrtc-tun2socks/Makefile luci-app-olcrtc/Makefile install.sh
+          if git diff --cached --quiet; then
+            echo "No Makefile changes to commit."
+          else
+            git commit -m "chore(sync): bump version to $VER from upstream"
+          fi
+
+          # Push changes to master
+          git push origin master
+
+          # Create tag if it doesn't already exist
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG" || true
+          fi
+
+      - name: Trigger build workflow
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering build.yml workflow..."
+          gh workflow run build.yml --ref master -f publish_release=true
