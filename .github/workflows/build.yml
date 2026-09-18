@@ -170,7 +170,6 @@ jobs:
               if [ -n "$arch_dir" ]; then
                 cp "$apk_path" "artifacts/olcrtc_${FULL_VER}_${arch_dir}.apk"
               fi
-              cp "$apk_path" "artifacts/olcrtc_${FULL_VER}_${safe_target}.apk"
             else
               cp "$apk_path" artifacts/
             fi
